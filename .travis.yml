@@ -35,7 +35,7 @@ before_deploy:
 - cp jars/quasar.jar slamdata/
 - tar cjf slamdata.tar.bz2 slamdata
 - gpg --import public.key
-- gpg -e -r SlamData slamdata.tar.bz2
+- gpg -e -r SlamData --trust-model always slamdata.tar.bz2
 deploy:
   provider: releases
   api-key:
