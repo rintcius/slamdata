@@ -28,8 +28,7 @@ before_script:
   - "sh -e /etc/init.d/xvfb start"
 script:
   - npm run psa
-  - npm run property-tests
-  - npm test
+  - if test $TRAVIS_TAG; then npm run property-tests && npm test else npm run build-lite fi
 before_deploy:
 - mkdir -p slamdata
 - cp -r public slamdata/
