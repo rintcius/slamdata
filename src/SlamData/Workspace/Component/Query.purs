@@ -36,6 +36,7 @@ data Query a
   | Load (List DeckId) a
   | ExploreFile UP.FilePath a
   | PresentStepByStepGuide GuideType (H.SubscribeStatus → a)
+  | ResetToOriginal a
   | Resize (H.SubscribeStatus → a)
   | SignIn ProviderR a
   | HandleGuideMessage GuideType Guide.Message a

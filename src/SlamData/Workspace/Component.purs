@@ -21,6 +21,7 @@ module SlamData.Workspace.Component
 
 import SlamData.Prelude
 
+import CSS as CSS
 import Control.Monad.Aff as Aff
 import Control.Monad.Aff.AVar (makeVar, peekVar, takeVar, putVar)
 import Control.Monad.Aff.Bus as Bus
@@ -36,6 +37,7 @@ import Halogen as H
 import Halogen.Component.Utils (busEventSource)
 import Halogen.Component.Utils.Throttled (throttledEventSource_)
 import Halogen.HTML as HH
+import Halogen.HTML.CSS as HCSS
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Query.EventSource as ES
@@ -76,6 +78,7 @@ import SlamData.Workspace.Guide as GuideData
 import SlamData.Workspace.StateMode (StateMode(..))
 import SlamData.Workspace.StateMode as StateMode
 import Utils (endSentence)
+import Utils.CSS (zIndex)
 import Utils.DOM (onResize, nodeEq)
 
 type WorkspaceHTML = H.ParentHTML Query ChildQuery ChildSlot Slam
@@ -100,13 +103,13 @@ render accessType state =
         ⊕ [ HH.ClassName "sd-workspace" ]
     , HE.onClick (HE.input DismissAll)
     ]
-    [ header
-    , deck
-    , notifications
-    , cardGuide
-    , flipGuide
-    , dialogSlot
-    ]
+    $ [ header
+      , deck
+      , notifications
+      , cardGuide
+      , flipGuide
+      , dialogSlot
+      ] <> (guard (AT.isReadOnly accessType) $> resetToOriginal )
   where
   renderError err =
     HH.div
@@ -119,6 +122,15 @@ render accessType state =
           then HH.p_ (renderSignInButton <$> state.providers)
           else HH.text ""
       ]
+
+  resetToOriginal =
+    HH.button
+      [ HE.onClick (HE.input_ ResetToOriginal)
+      , HP.classes [ HH.ClassName "btn", HH.ClassName "btn-primary" ]
+      , HCSS.style do zIndex 999
+                      CSS.position CSS.absolute
+      ]
+      [ HH.text "Reset to original" ]
 
   renderSignInButton providerR =
     HH.button
@@ -185,6 +197,11 @@ eval = case _ of
   Resize reply → do
     _ ← queryDeck (H.action Deck.UpdateCardSize)
     pure $ reply H.Listening
+  ResetToOriginal next → do
+    st ← H.get
+    for_ st.cursor (LS.remove ∘ LSK.cardsLocalStorageKey)
+    H.liftEff Browser.reload
+    pure next
   New next → do
     st ← H.get
     when (List.null st.cursor) do
@@ -201,23 +218,7 @@ eval = case _ of
       initializeGuides
     pure next
   Load cursor next → do
-    st ← H.get
-    case st.stateMode of
-      Loading → do
-        rootId ← H.lift P.loadWorkspace
-        case rootId of
-          Left err → do
-            providers ←
-              Quasar.retrieveAuthProviders <#> case _ of
-                Right (Just providers) → providers
-                _ → []
-            H.modify _
-              { stateMode = Error err
-              , providers = providers
-              }
-            for_ (GE.fromQError err) GE.raiseGlobalError
-          Right _ → loadCursor cursor
-      _ → loadCursor cursor
+    load cursor
     initializeGuides
     pure next
   SignIn providerR next → do
@@ -249,6 +250,25 @@ eval = case _ of
     handleDialog msg $> next
 
   where
+  load cursor = do
+    st ← H.get
+    case st.stateMode of
+      Loading → do
+        rootId ← H.lift P.loadWorkspace
+        case rootId of
+          Left err → do
+            providers ←
+              Quasar.retrieveAuthProviders <#> case _ of
+                Right (Just providers) → providers
+                _ → []
+            H.modify _
+              { stateMode = Error err
+              , providers = providers
+              }
+            for_ (GE.fromQError err) GE.raiseGlobalError
+          Right _ → loadCursor cursor
+      _ → loadCursor cursor
+
   loadCursor cursor = do
     cursor' ←
       if List.null cursor
