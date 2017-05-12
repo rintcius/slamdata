@@ -95,17 +95,19 @@ type ForkAff m a =
   ⇒ MonadFork Exn.Error m
   ⇒ a
 
-loadWorkspace ∷ ∀ f m. Persist f m (m (Either QE.QError Deck.Id))
+loadWorkspace ∷ ∀ f m. Persist f m (m (Either QE.QError Unit))
 loadWorkspace = runExceptT do
-  { path, eval, accessType } ← Wiring.expose
+  { bus, path, eval, accessType } ← Wiring.expose
   stat × ws ← ExceptT $ loadCompatWorkspace path
-  cards ← case accessType of
+  consumerMadeChanges × cards ← case accessType of
     AccessType.Editable →
-      pure ws.cards
-    AccessType.ReadOnly →
-      lift
-        $ Map.unionWith CM.updateCardModel ws.cards
-        <$> getLocallyStoredCards ws.rootId
+      pure $ false × ws.cards
+    AccessType.ReadOnly → do
+      cardsConsumerChanged <- lift $ getLocallyStoredCards ws.rootId
+      pure
+        $ not (Map.isEmpty cardsConsumerChanged)
+        × Map.unionWith CM.updateCardModel ws.cards cardsConsumerChanged
+  when consumerMadeChanges $ liftAff $ Bus.write unit bus.consumerChanges
   liftAff $ putVar eval.root ws.rootId
   graph ← note (QE.msgToQError "Cannot build graph") $
     unfoldModelTree ws.decks cards ws.rootId
@@ -113,7 +115,7 @@ loadWorkspace = runExceptT do
   when (isLegacy stat && AccessType.isEditable accessType) do
     ExceptT saveWorkspace
     void $ lift $ pruneLegacyData path -- Not imperative that this succeeds
-  pure ws.rootId
+  pure unit
 
 saveWorkspace ∷ ∀ f m. Persist f m (m (Either QE.QError Unit))
 saveWorkspace = runExceptT do
@@ -275,13 +277,14 @@ snapshotGraph cardId = do
 
 queueSave ∷ ∀ f m. Persist f m (Milliseconds → Maybe Card.Id → m Unit)
 queueSave ms cardId = do
-  { eval, path, accessType } ← Wiring.expose
+  { bus, eval, path, accessType } ← Wiring.expose
   debounce ms path { avar: _ } eval.debounceSaves (pure unit)
     case accessType of
       AccessType.Editable →
         void saveWorkspace
-      AccessType.ReadOnly →
+      AccessType.ReadOnly → do
         for_ cardId saveCardLocally
+        liftAff $ Bus.write unit bus.consumerChanges
 
 queueSaveImmediate ∷ ∀ f m. Persist f m (Maybe Card.Id → m Unit)
 queueSaveImmediate = queueSave (Milliseconds 0.0)

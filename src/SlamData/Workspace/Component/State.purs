@@ -31,6 +31,7 @@ type State =
   , stateMode ∷ StateMode
   , providers ∷ Array ProviderR
   , guide ∷ Maybe GuideType
+  , isModified ∷ Boolean
   }
 
 initialState ∷ State
@@ -39,4 +40,5 @@ initialState =
   , stateMode: Loading
   , providers: mempty
   , guide: Nothing
+  , isModified: false
   }

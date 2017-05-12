@@ -109,7 +109,7 @@ render accessType state =
       , cardGuide
       , flipGuide
       , dialogSlot
-      ] <> (guard (AT.isReadOnly accessType) $> resetToOriginal )
+      ] <> resetToOriginal
   where
   renderError err =
     HH.div
@@ -124,6 +124,7 @@ render accessType state =
       ]
 
   resetToOriginal =
+    guard (AT.isReadOnly accessType && state.isModified) $>
     HH.button
       [ HE.onClick (HE.input_ ResetToOriginal)
       , HP.classes [ HH.ClassName "btn", HH.ClassName "btn-primary" ]
@@ -183,6 +184,7 @@ eval = case _ of
     H.subscribe $ busEventSource (H.request ∘ PresentStepByStepGuide) bus.stepByStep
     H.subscribe $ busEventSource (flip HandleSignInMessage ES.Listening) auth.signIn
     H.subscribe $ busEventSource (flip HandleWorkspace ES.Listening) bus.workspace
+    H.subscribe $ busEventSource (flip (const HandleConsumerChange) ES.Listening) bus.consumerChanges
     H.subscribe $ throttledEventSource_ (Milliseconds 100.0) onResize (H.request Resize)
     pure next
   PresentStepByStepGuide guideType reply → do
@@ -248,25 +250,28 @@ eval = case _ of
     H.query' cpDialog unit (H.action (Dialog.Show dlg)) $> next
   HandleDialog msg next →
     handleDialog msg $> next
+  HandleConsumerChange next ->
+    H.modify _ { isModified = true } $> next
 
   where
   load cursor = do
     st ← H.get
     case st.stateMode of
       Loading → do
-        rootId ← H.lift P.loadWorkspace
-        case rootId of
-          Left err → do
-            providers ←
-              Quasar.retrieveAuthProviders <#> case _ of
-                Right (Just providers) → providers
-                _ → []
-            H.modify _
-              { stateMode = Error err
-              , providers = providers
-              }
-            for_ (GE.fromQError err) GE.raiseGlobalError
-          Right _ → loadCursor cursor
+        H.lift P.loadWorkspace
+          >>= case _ of
+            Left err → do
+              providers ←
+                Quasar.retrieveAuthProviders <#> case _ of
+                  Right (Just providers) → providers
+                  _ → []
+              H.modify _
+                { stateMode = Error err
+                , providers = providers
+                }
+              for_ (GE.fromQError err) GE.raiseGlobalError
+            Right _ →
+              loadCursor cursor
       _ → loadCursor cursor
 
   loadCursor cursor = do

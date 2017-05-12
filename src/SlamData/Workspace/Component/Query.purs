@@ -44,3 +44,4 @@ data Query a
   | HandleSignInMessage SignInMessage a
   | HandleWorkspace Wiring.WorkspaceMessage a
   | HandleDialog Dialog.Message a
+  | HandleConsumerChange a

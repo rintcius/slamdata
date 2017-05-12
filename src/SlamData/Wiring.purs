@@ -131,6 +131,7 @@ type CacheWiring =
 
 type BusWiring =
   { decks ∷ Bus.BusRW DeckMessage
+  , consumerChanges :: Bus.BusRW Unit
   , workspace ∷ Bus.BusRW WorkspaceMessage
   , notify ∷ Bus.BusRW N.NotificationOptions
   , globalError ∷ Bus.BusRW GE.GlobalError
@@ -227,7 +228,8 @@ make path accessType vm permissionTokenHashes = liftAff do
     globalError ← Bus.make
     stepByStep ← Bus.make
     hintDismissals ← Bus.make
-    pure { decks, workspace, notify, globalError, stepByStep, hintDismissals }
+    consumerChanges <- Bus.make
+    pure { decks, workspace, notify, globalError, stepByStep, hintDismissals, consumerChanges }
 
 focusDeck
   ∷ ∀ m
